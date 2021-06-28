@@ -165,6 +165,7 @@ MXFFileReader::MXFFileReader()
     mEssenceReader = 0;
     mRequireFrameInfoCount = 0;
     mST436ManifestCount = 2;
+    mFastParseXDCAM = false;
 
     mDataModel = new DataModel();
     mHeaderMetadata = new AvidHeaderMetadata(mDataModel);
@@ -227,6 +228,11 @@ void MXFFileReader::SetEmptyFrames(bool enable)
 void MXFFileReader::SetST436ManifestFrameCount(uint32_t count)
 {
     mST436ManifestCount = count;
+}
+
+void MXFFileReader::SetFastParseXDCAM(bool mode)
+{
+    mFastParseXDCAM = mode;
 }
 
 void MXFFileReader::SetFileIndex(MXFFileIndex *file_index, bool take_ownership)
@@ -341,7 +347,21 @@ MXFFileReader::OpenResult MXFFileReader::Open(File *file, const URI &abs_uri, co
 
         bool file_is_complete;
         if (mFile->isSeekable()) {
-            file_is_complete = mFile->readPartitions();
+            if (mFastParseXDCAM == true) {
+                // XDCAM Fastparse mode: must have RIP and repetition of Index Table Segments
+                if (mFile->fastReadPartitions()) {
+                    log_debug("Fastparse got Partitions from RIP\n");
+                    file_is_complete = true;
+                }
+                else {
+                    log_info("Error parsing RIP for XDCAM Fastparse mode, trying starndard mode\n");
+                    file_is_complete = mFile->readPartitions();
+                }
+            }
+            else {
+                // default parsing mode
+                file_is_complete = mFile->readPartitions();
+            }
             if (!file_is_complete) {
                 BMX_ASSERT(mFile->getPartitions().size() == 1);
                 if (mFile->getPartition(0).isClosed() || mFile->getPartition(0).getFooterPartition() != 0)

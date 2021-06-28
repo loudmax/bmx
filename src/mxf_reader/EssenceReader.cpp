@@ -281,20 +281,35 @@ EssenceReader::EssenceReader(MXFFileReader *file_reader, bool file_is_complete, 
         }
     }
 
-    // if file is complete then read the index table segments, essence container layout and
-    // determine the essence wrapping type
     if (file_is_complete) {
-        if (mFileReader->mIndexSID)
-            mIndexTableHelper.ExtractIndexTable();
-
-        // first edit unit size is used to determine the essence wrapping type
-        int64_t first_edit_unit_size = 0;
-        if (mIndexTableHelper.HaveEditUnitSize(0)) {
-            int64_t offset;
-            mIndexTableHelper.GetEditUnit(0, &offset, &first_edit_unit_size);
+        // if file is complete then read the index table segments, essence container layout and
+        // determine the essence wrapping type
+        if (mFileReader->mIndexSID) {
+            if (mFileReader->mFastParseXDCAM == true)
+            {
+                // Userinput --fastparse-xdcam is enabled
+                if (!mIndexTableHelper.FastExtractIndexTable() || !mEssenceChunkHelper.FastCreateEssenceChunkIndex()) {
+                    log_info("XDCAM FastParse Mode failed to extract Index Table repetition, trying normal mode\n");
+                    mIndexTableHelper.ExtractIndexTable();
+                }
+            }
+            else {
+                // standard parsing mode
+                mIndexTableHelper.ExtractIndexTable();
+            }
         }
-        mEssenceChunkHelper.CreateEssenceChunkIndex(first_edit_unit_size);
-        BMX_ASSERT(mEssenceChunkHelper.IsComplete());
+
+        if (!mEssenceChunkHelper.IsComplete()) {
+            // first edit unit size is used to determine the essence wrapping type
+            int64_t first_edit_unit_size = 0;
+            if (mIndexTableHelper.HaveEditUnitSize(0)) {
+                int64_t offset;
+                mIndexTableHelper.GetEditUnit(0, &offset, &first_edit_unit_size);
+            }
+
+            mEssenceChunkHelper.CreateEssenceChunkIndex(first_edit_unit_size);
+            BMX_ASSERT(mEssenceChunkHelper.IsComplete());
+        }
 
         // if the essence wrapping type still unknown then go with the guessed type
         if (mFileReader->mWrappingType == MXF_UNKNOWN_WRAPPING_TYPE)

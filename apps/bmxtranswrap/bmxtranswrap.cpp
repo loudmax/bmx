@@ -598,6 +598,7 @@ static void usage(const char *cmd)
     fprintf(stderr, "\n");
     fprintf(stderr, "  op1a/rdd9:\n");
     fprintf(stderr, "    --ard-zdf-hdf           Use the ARD ZDF HDF profile\n");
+    fprintf(stderr, "    --fastparse-xdcam       Reduce disk read I/O by using Index repetition from Footer (e.g. for reading from XDCAM Professional Disk)\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  op1a/d10:\n");
     fprintf(stderr, "    --cbe-index-duration-0  Use duration=0 if index table is CBE\n");
@@ -816,6 +817,7 @@ int main(int argc, const char** argv)
     uint8_t d10_mute_sound_flags = 0;
     uint8_t d10_invalid_sound_flags = 0;
     const char *originator = DEFAULT_BEXT_ORIGINATOR;
+    bool fast_parse_xdcam = false;
     AvidUMIDType avid_umid_type = AAFSDK_UMID_TYPE;
     UMID mp_uid;
     bool mp_uid_set = false;
@@ -2550,6 +2552,10 @@ int main(int argc, const char** argv)
         {
             BMX_REGRESSION_TEST = true;
         }
+        else if (strcmp(argv[cmdln_index], "--fastparse-xdcam") == 0)
+        {
+            fast_parse_xdcam = true;
+        }
         else
         {
             break;
@@ -2712,6 +2718,7 @@ int main(int argc, const char** argv)
                 grp_file_reader->SetFileFactory(&file_factory, false);
                 grp_file_reader->GetPackageResolver()->SetFileFactory(&file_factory, false);
                 grp_file_reader->SetST436ManifestFrameCount(st436_manifest_count);
+                grp_file_reader->SetFastParseXDCAM(fast_parse_xdcam);
                 result = grp_file_reader->Open(input_filenames[i]);
                 if (result != MXFFileReader::MXF_RESULT_SUCCESS) {
                     log_error("Failed to open MXF file '%s': %s\n", input_filenames[i],
@@ -2735,6 +2742,7 @@ int main(int argc, const char** argv)
                 seq_file_reader->SetFileFactory(&file_factory, false);
                 seq_file_reader->GetPackageResolver()->SetFileFactory(&file_factory, false);
                 seq_file_reader->SetST436ManifestFrameCount(st436_manifest_count);
+                seq_file_reader->SetFastParseXDCAM(fast_parse_xdcam);
                 result = seq_file_reader->Open(input_filenames[i]);
                 if (result != MXFFileReader::MXF_RESULT_SUCCESS) {
                     log_error("Failed to open MXF file '%s': %s\n", input_filenames[i],
@@ -2755,6 +2763,7 @@ int main(int argc, const char** argv)
             file_reader->SetFileFactory(&file_factory, false);
             file_reader->GetPackageResolver()->SetFileFactory(&file_factory, false);
             file_reader->SetST436ManifestFrameCount(st436_manifest_count);
+            file_reader->SetFastParseXDCAM(fast_parse_xdcam);
             if (pass_dm && clip_sub_type == AS11_CLIP_SUB_TYPE)
                 AS11Info::RegisterExtensions(file_reader->GetHeaderMetadata());
             if (pass_dm && clip_sub_type == AS10_CLIP_SUB_TYPE)

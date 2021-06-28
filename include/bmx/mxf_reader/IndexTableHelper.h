@@ -107,6 +107,8 @@ public:
     ~IndexTableHelper();
 
     void ExtractIndexTable();
+    bool FastExtractIndexTable();
+    void ResetFastExtractIndexTable();
 
     void SetEssenceDataSize(int64_t size);
 
