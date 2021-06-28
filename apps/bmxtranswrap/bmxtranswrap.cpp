@@ -45,6 +45,7 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <fstream>
 
 #include "MXFInputTrack.h"
 #include "../writers/OutputTrack.h"
@@ -365,6 +366,8 @@ static void usage(const char *cmd)
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage: %s <<options>> [<<input options>> <mxf input>]+\n", cmd);
     fprintf(stderr, "   Use <mxf input> '-' for standard input\n");
+    fprintf(stderr, "   It is possible to specify the path to a command text file as first and only argument.\n");
+    fprintf(stderr, "   In that case, each line of the text file shall contain exactly one switch or value without quotes, not both in the same line.\n");
     fprintf(stderr, "Options (* means option is required):\n");
     fprintf(stderr, "  -h | --help             Show usage and exit\n");
     fprintf(stderr, "  -v | --version          Print version info\n");
@@ -913,6 +916,32 @@ int main(int argc, const char** argv)
                 return 0;
             }
             do_print_version = true;
+        }
+        else if (argc == 2) {
+            struct stat buffer;
+            if (check_file_exists(argv[1])) {
+                fprintf(stderr, "Reading command line arguments from File\n");
+                if (get_file_size(argv[1]) > 10000000) {
+                    fprintf(stderr, "Commandline arguments file size larger than 10MB is not supported\n");
+                    return 1;
+                }
+                else {
+                    std::ifstream input(argv[1]);
+                    std::string line;
+                    std::vector<const char*> new_argv(1, argv[0]);
+                    while (std::getline(input, line)) {
+                        if (strcmp(line.c_str(), "") != 0){
+                            char* _buf = new char[line.size() + 1];
+                            _buf[line.size()] = '\0';
+                            copy(line.begin(), line.end(), _buf);
+                            new_argv.push_back(_buf);
+                        }
+                    }
+                    argv = new const char*[new_argv.size()];
+                    std::copy(new_argv.begin(), new_argv.end(), argv);
+                    argc = new_argv.size();
+                }
+            }
         }
         else if (strcmp(argv[cmdln_index], "-p") == 0)
         {
