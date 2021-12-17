@@ -231,55 +231,53 @@ bool EssenceChunkHelper::FastCreateEssenceChunkIndex()
     //
 
     File* mxf_file = mFileReader->mFile;
-    mxfKey _key;
-    uint8_t _llen = 0;
-    uint64_t _len = 0;
-    mxfKey essenceStartKey;
+    mxfKey key;
+    uint8_t llen = 0;
+    uint64_t len = 0;
+    mxfKey essence_start_key;
 
     if (mFileReader->mWrappingType != MXF_FRAME_WRAPPED) {
         log_warn("FastCreateEssenceChunkIndex cannot happen because wrapping type is not MXF_FRAME_WRAPPED");
         return false;
     }
 
-    // partitions must have BodyOffset and BodySID
     const vector<Partition*>& partitions = mFileReader->mFile->getPartitions();
     if (partitions.size() < 3) {
-        log_error("FastCreateEssenceChunkIndex expected at least 3 partitions(header,body,footer), only got %d\n",
+        log_error("FastCreateEssenceChunkIndex expected at least 3 partitions(header,body,footer), only got %" PRIszt "\n",
                   partitions.size());
         return false;
     }
 
     // only for first essence element, read the key of first item in chunk (should typically be Systemitem)
     mxf_file->seek(partitions[1]->getThisPartition(), SEEK_SET);
-    mxf_file->readKL(&_key, &_llen, &_len);
-    mxf_file->skip(_len);
-    mxf_file->readNextNonFillerKL(&essenceStartKey, &_llen, &_len);
+    mxf_file->readKL(&key, &llen, &len);
+    mxf_file->skip(len);
+    mxf_file->readNextNonFillerKL(&essence_start_key, &llen, &len);
 
+    // process partitions. Header and footer partitions should not have essence in RDD09
     size_t i;
-    for (i = 0; i < partitions.size(); i++) {
-        if (i == 0 || i == partitions.size()) {
-            // header and footer partitions should not have essence in RDD09
+    for (i = 1; i < partitions.size() - 1; i++) {
+        if (partitions[i]->getBodySID() != mFileReader->mBodySID ||
+            partitions[i]->getBodyOffset() == (uint64_t)(-1) ||
+            partitions[i + 1]->getBodyOffset() == (uint64_t)(-1))
+        {
             continue;
         }
-        if ((partitions[i]->getBodySID() != mFileReader->mBodySID) || partitions[i]->getBodyOffset() == -1)
-            continue;
 
         uint64_t partition_end = partitions[i + 1]->getThisPartition();
         // Footer BodyOffset was calculated in IndexTableHelper::FastExtractIndexTable
-        int64_t startOfEssence = partitions[i + 1]->getThisPartition() - partitions[i + 1]->getBodyOffset()
-                                                                        + partitions[i]->getBodyOffset()
-                                                                        + 16
-                                                                        + _llen;
-        AppendChunk(i, startOfEssence, &essenceStartKey, _llen, _len);
+        int64_t start_of_essence = partition_end - partitions[i + 1]->getBodyOffset()
+                                                 + partitions[i]->getBodyOffset()
+                                                 + mxfKey_extlen
+                                                 + llen;
+        AppendChunk(i, start_of_essence, &essence_start_key, llen, len);
         UpdateLastChunk(partition_end, true);
-        partition_end = partitions[i + 1]->getThisPartition();
-
     }
 
     if (mEssenceChunks.size() < partitions.size() - 2) {
         // header and footer partition don't count
         log_debug("FastCreateEssenceChunkIndex was not able to get all bodyOffsets, use CreateEssenceChunkIndex instead."
-                  "Expected %d, got %d\n", partitions.size() - 3, mEssenceChunks.size());
+                  "Expected %" PRIszt ", got %" PRIszt "\n", partitions.size() - 2, mEssenceChunks.size());
         mEssenceChunks.clear();
         return false;
     }

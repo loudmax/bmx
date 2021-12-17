@@ -230,9 +230,9 @@ void MXFFileReader::SetST436ManifestFrameCount(uint32_t count)
     mST436ManifestCount = count;
 }
 
-void MXFFileReader::SetFastParseXDCAM(bool mode)
+void MXFFileReader::SetFastParseXDCAM(bool enable)
 {
-    mFastParseXDCAM = mode;
+    mFastParseXDCAM = enable;
 }
 
 void MXFFileReader::SetFileIndex(MXFFileIndex *file_index, bool take_ownership)
@@ -347,21 +347,7 @@ MXFFileReader::OpenResult MXFFileReader::Open(File *file, const URI &abs_uri, co
 
         bool file_is_complete;
         if (mFile->isSeekable()) {
-            if (mFastParseXDCAM == true) {
-                // XDCAM Fastparse mode: must have RIP and repetition of Index Table Segments
-                if (mFile->fastReadPartitions()) {
-                    log_debug("Fastparse got Partitions from RIP\n");
-                    file_is_complete = true;
-                }
-                else {
-                    log_info("Error parsing RIP for XDCAM Fastparse mode, trying starndard mode\n");
-                    file_is_complete = mFile->readPartitions();
-                }
-            }
-            else {
-                // default parsing mode
-                file_is_complete = mFile->readPartitions();
-            }
+            file_is_complete = mFile->readPartitions(mFastParseXDCAM);
             if (!file_is_complete) {
                 BMX_ASSERT(mFile->getPartitions().size() == 1);
                 if (mFile->getPartition(0).isClosed() || mFile->getPartition(0).getFooterPartition() != 0)

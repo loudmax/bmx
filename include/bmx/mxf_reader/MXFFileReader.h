@@ -99,7 +99,7 @@ public:
     void SetST436ManifestFrameCount(uint32_t count);     // default: 2 frames used to extract manifest
     virtual void SetFileIndex(MXFFileIndex *file_index, bool take_ownership);
     virtual void SetMCALabelIndex(MXFMCALabelIndex *label_index, bool take_ownership);
-    void MXFFileReader::SetFastParseXDCAM(bool mode); // default: 0, XDCAM FastParse mode = 1
+    void SetFastParseXDCAM(bool enable); // default: false
 
     OpenResult Open(std::string filename, int mode_flags=0);
     OpenResult Open(mxfpp::File *file, std::string filename, int mode_flags=0);

@@ -348,7 +348,6 @@ void IndexTableHelper::ExtractIndexTable()
     for (i = 0; i < partitions.size(); i++) {
         const Partition *partition = partitions[i];
 
-
         if (partition->getIndexSID() != mFileReader->mIndexSID)
             continue;
 
@@ -407,8 +406,12 @@ void IndexTableHelper::ExtractIndexTable()
 void IndexTableHelper::ResetFastExtractIndexTable()
 {
     // If Fastextract failed, we allow to go on in the default way
+    size_t i;
+    for (i = 0; i < mSegments.size(); i++)
+        delete mSegments[i];
     mSegments.clear();
-    mIsComplete = mFileReader->mFile->readPartitions();
+
+    mIsComplete = false;
     mLastEditUnitSegment = 0;
     mEditUnitSize = 0;
     mEssenceDataSize = 0;
@@ -424,14 +427,18 @@ bool IndexTableHelper::FastExtractIndexTable()
     //  returns false if it did not succeed
     //  Important Note: sets (updates) partition's Body offset value - in case they were not set by (fast)ReadPartitions()
     //
-    uint64_t lastFilePointer = mFile->tell();
     mxfKey key;
     uint8_t llen;
     uint64_t len;
 
     if (mFile->getPartitions().empty())
         return false;
-    Partition* footer_partition = mFile->getPartitions().back();
+
+    // The code below assumes the first & last partition has no essence
+    if (mFile->getPartitions().front()->getBodySID() != 0 || mFile->getPartitions().back()->getBodySID() != 0)
+        return false;
+
+    Partition *footer_partition = mFile->getPartitions().back();
     if (footer_partition->getThisPartition() == 0)
         return false;
 
@@ -441,13 +448,12 @@ bool IndexTableHelper::FastExtractIndexTable()
     mFile->skip(len);
 
     while (!mFile->eof()) {
-        // parse until we hit first index table segment
         mFile->readNextNonFillerKL(&key, &llen, &len);
 
         if (mxf_is_partition_pack(&key) || mxf_is_index_table_segment(&key))
             break;
-        else if (mxf_is_header_metadata(&key) && footer_partition->getHeaderByteCount() > mxfKey_extlen + (uint64_t)llen + len)
-            mFile->skip(footer_partition->getHeaderByteCount() - (mxfKey_extlen + (uint64_t)llen));
+        else if (mxf_is_header_metadata(&key) && footer_partition->getHeaderByteCount() > mxfKey_extlen + llen + len)
+            mFile->skip(footer_partition->getHeaderByteCount() - (mxfKey_extlen + llen));
         else
             mFile->skip(len);
     }
@@ -458,11 +464,6 @@ bool IndexTableHelper::FastExtractIndexTable()
 
         while (!mFile->eof())
         {
-            int8_t  _pos = 0;
-            int8_t  _temp_offset = 0;
-            uint8_t _key_frame_offset = 0;
-            int64_t _body_offset = 0;
-
             if (mxf_is_index_table_segment(&key)) {
                 // process index table segment
                 try
@@ -472,60 +473,72 @@ bool IndexTableHelper::FastExtractIndexTable()
                 }
                 catch (...)
                 {
-                    log_debug("Could not Fastparse index: ReadIndexTableSegment failed, seeking to %d\n", lastFilePointer);
+                    log_debug("Could not Fastparse index: ReadIndexTableSegment failed\n");
                     ResetFastExtractIndexTable();
                     return false;
                 }
-                if (mSegments.size()-1 > mFile->getPartitions().size()) {
+
+                if (mSegments.size() + 2 > mFile->getPartitions().size()) {
                     log_error("Found More index segments than Body Partitions, cannot use Fast Index mode\n");
                     ResetFastExtractIndexTable();
                     return false;
                 }
 
                 // in fast mode we have to calculate and set the BodyOffset for the partitions
-                this->GetEditUnit(full_index_duration, &_pos, &_temp_offset, &_key_frame_offset, &_body_offset);
+                int8_t pos = 0;
+                int8_t temp_offset = 0;
+                uint8_t key_frame_offset = 0;
+                int64_t body_offset = 0;
+                GetEditUnit(full_index_duration, &pos, &temp_offset, &key_frame_offset, &body_offset);
 
                 // initialize the values for the current partitions as File.cpp was not able to do so by just looking at RIP
-                full_index_duration += mSegments[mSegments.size()-1]->getIndexDuration();
-                mFile->getPartition(mSegments.size()).setBodyOffset(_body_offset);
-                mFile->getPartition(mSegments.size()).setIndexSID(mSegments[mSegments.size()-1]->getIndexSID());
+                full_index_duration += mSegments.back()->getIndexDuration();
+                mFile->getPartition(mSegments.size()).setBodyOffset(body_offset);
             }
             else if (mxf_is_filler(&key)) {
                 mFile->skip(len);
             }
             else {
                 // no more index table segments, calculate Footer Body offset
+                // NOTE: the Footer BodyOffset is being used to store the essence size
+                // for EssenceChunkHelper::FastCreateEssenceChunkIndex
+
+                if (mSegments.size() != mFile->getPartitions().size() - 2) {
+                    log_warn("Segments parsed from Footer Index Repetition [%" PRIszt "] did not match Body Partition Count [%" PRIszt "]\n",
+                             mSegments.size(), mFile->getPartitions().size()-2);
+                    ResetFastExtractIndexTable();
+                    return false;
+                }
 
                 int64_t last_essence_start = 0;
-                File* mxf_file = mFile;
+                Partition *last_body_partition = mFile->getPartitions()[mSegments.size()];
 
-                mxf_file->seek(mFile->getPartition(mSegments.size()).getThisPartition(), SEEK_SET);
+                mFile->seek(last_body_partition->getThisPartition(), SEEK_SET);
 
-                while (!mxf_file->eof()) {
-                    mxf_file->readNextNonFillerKL(&key, &llen, &len);
+                while (!mFile->eof()) {
+                    mFile->readNextNonFillerKL(&key, &llen, &len);
                     if (!mxf_is_ul(&key)) {
                         log_debug("Found non-ul where a ul was expected most likely your mxf file is defective or has runin. Offset: %" PRId64 "\n",
-                            mxf_file->tell());
-                            ResetFastExtractIndexTable();
-                            return false;
+                                  mFile->tell());
+                        ResetFastExtractIndexTable();
+                        return false;
                     }
                     if (mxf_is_gc_essence_element(&key)) {
-                        mxf_file->seek(mxf_file->tell() - mxfKey_extlen - llen, SEEK_SET);
-                        last_essence_start = mxf_file->tell();
+                        last_essence_start = mFile->tell() - mxfKey_extlen - llen;
                         break;
                     }
                     else {
-                        mxf_file->skip(len);
+                        mFile->skip(len);
                     }
                 }
 
-                int64_t last_essence_size = mFile->getPartition(mSegments.size() + 1).getThisPartition() - last_essence_start;
-                int64_t full_essence_size = last_essence_size + mFile->getPartition(mSegments.size()).getBodyOffset();
+                int64_t last_essence_size = footer_partition->getThisPartition() - last_essence_start;
+                int64_t full_essence_size = last_essence_size + last_body_partition->getBodyOffset();
                 log_debug("Total Essence Size:  %" PRIx64 "\n", full_essence_size);
-                mFile->getPartition(mSegments.size()+1).setBodyOffset(full_essence_size);
+                footer_partition->setBodyOffset(full_essence_size);
                 break;
             }
-            //read next KL
+
             mFile->readKL(&key, &llen, &len);
         }
     }
@@ -537,18 +550,18 @@ bool IndexTableHelper::FastExtractIndexTable()
 
     mIsComplete = !mSegments.empty();
     if (mSegments.size() != mFile->getPartitions().size() - 2) {
-        log_warn("Segments parsed from Footer Index Repetition [%d] did not match Body Partition Count [%d]\n",
+        log_warn("Segments parsed from Footer Index Repetition [%" PRIszt "] did not match Body Partition Count [%" PRIszt "]\n",
                  mSegments.size(), mFile->getPartitions().size()-2);
         mIsComplete = false;
     }
 
-    if (mIsComplete) {
-        log_debug("Fastparse got Index from Footer\n");
-        return true;
+    if (!mIsComplete) {
+        ResetFastExtractIndexTable();
+        return false;
     }
 
-    ResetFastExtractIndexTable();
-    return false;
+    log_debug("Fastparse got Index from Footer\n");
+    return true;
 }
 
 void IndexTableHelper::SetEssenceDataSize(int64_t size)
