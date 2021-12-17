@@ -898,6 +898,29 @@ int main(int argc, const char** argv)
         return 0;
     }
 
+    if (argc == 2 && check_file_exists(argv[1])) {
+        fprintf(stderr, "Reading command line arguments from File\n");
+        if (get_file_size(argv[1]) > 10000000) {
+            fprintf(stderr, "Commandline arguments file size larger than 10MB is not supported\n");
+            return 1;
+        }
+
+        std::ifstream input(argv[1]);
+        std::string line;
+        std::vector<const char*> new_argv(1, argv[0]);
+        while (std::getline(input, line)) {
+            if (strcmp(line.c_str(), "") != 0){
+                char* _buf = new char[line.size() + 1];
+                _buf[line.size()] = '\0';
+                copy(line.begin(), line.end(), _buf);
+                new_argv.push_back(_buf);
+            }
+        }
+        argv = new const char*[new_argv.size()];
+        std::copy(new_argv.begin(), new_argv.end(), argv);
+        argc = new_argv.size();
+    }
+
     for (cmdln_index = 1; cmdln_index < argc; cmdln_index++)
     {
         msvc_block_limit = false;
@@ -916,31 +939,6 @@ int main(int argc, const char** argv)
                 return 0;
             }
             do_print_version = true;
-        }
-        else if (argc == 2) {
-            if (check_file_exists(argv[1])) {
-                fprintf(stderr, "Reading command line arguments from File\n");
-                if (get_file_size(argv[1]) > 10000000) {
-                    fprintf(stderr, "Commandline arguments file size larger than 10MB is not supported\n");
-                    return 1;
-                }
-                else {
-                    std::ifstream input(argv[1]);
-                    std::string line;
-                    std::vector<const char*> new_argv(1, argv[0]);
-                    while (std::getline(input, line)) {
-                        if (strcmp(line.c_str(), "") != 0){
-                            char* _buf = new char[line.size() + 1];
-                            _buf[line.size()] = '\0';
-                            copy(line.begin(), line.end(), _buf);
-                            new_argv.push_back(_buf);
-                        }
-                    }
-                    argv = new const char*[new_argv.size()];
-                    std::copy(new_argv.begin(), new_argv.end(), argv);
-                    argc = new_argv.size();
-                }
-            }
         }
         else if (strcmp(argv[cmdln_index], "-p") == 0)
         {
