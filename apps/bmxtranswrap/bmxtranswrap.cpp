@@ -918,7 +918,6 @@ int main(int argc, const char** argv)
             do_print_version = true;
         }
         else if (argc == 2) {
-            struct stat buffer;
             if (check_file_exists(argv[1])) {
                 fprintf(stderr, "Reading command line arguments from File\n");
                 if (get_file_size(argv[1]) > 10000000) {
