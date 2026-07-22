@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           # Upload RDD-6 pages only
-          path: './meta/rdd6_xml_creator/**'
+          path: 'meta/rdd6_xml_creator/'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
