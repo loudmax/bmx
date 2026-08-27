@@ -64,8 +64,10 @@
 #define OP1A_AES_FLAVOUR                    0x0400
 #define OP1A_SYSTEM_ITEM_FLAVOUR            0x0800      // add system item
 #define OP1A_IMF_FLAVOUR                    0x1000
-#define OP1A_ARD_ZDF_XDF_PROFILE_FLAVOUR    0x2000
-
+#define OP1A_RDD32_FLAVOUR                  0x2000
+#define OP1A_ARD_ZDF_XDF_PROFILE_FLAVOUR    0x2000      // The ARD-ZDF-XDF profile is a restricted subset of this RDD32 implementation and is linked to it here.
+                                                        // If this RDD32 implementation is modified and no longer conforms to the ARD-ZDF-XDF profile,
+                                                        // this link must be removed and the ARD-ZDF-XDF implementation must be adjusted.
 
 
 namespace bmx
@@ -150,6 +152,7 @@ public:
     std::string GetMD5DigestStr() const { return mMD5DigestStr; }
 
     int GetFlavour() const { return mFlavour; }
+    uint32_t GetKAGSize() const { return mKAGSize; }
 
     UniqueIdHelper* GetTrackIdHelper()  { return &mTrackIdHelper; }
     UniqueIdHelper* GetStreamIdHelper() { return &mStreamIdHelper; }
@@ -167,6 +170,7 @@ private:
     mxfpp::SourcePackage* CreateFileSourcePackage(UMID package_uid, int64_t track_duration, int64_t track_origin);
     void CreateFile();
     void WriteTimedTextIndexTable(OP1ATimedTextTrack *tt_track);
+    void ResolveRDD32EssenceLocationStyle();
 
     void UpdatePackageMetadata();
     void UpdateTrackMetadata(mxfpp::GenericPackage *package, int64_t origin, int64_t duration);
