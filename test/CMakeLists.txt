@@ -13,6 +13,7 @@ set_source_filename(file_truncate "${CMAKE_CURRENT_LIST_DIR}" "bmx")
 
 if(NOT BMX_BUILD_LIB_ONLY AND BMX_BUILD_APPS)
     add_subdirectory(ard_zdf_hdf)
+    add_subdirectory(ard_zdf_xdf)
     add_subdirectory(as02)
     add_subdirectory(as10)
     add_subdirectory(as11)
